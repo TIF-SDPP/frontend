@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  react_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: frontend
+    env_file:
+      - .env
+    networks:
+      - red_ej2
+    ports:
+      - "5173:5173"
+
+networks:
+  red_ej2:
+    external: true
