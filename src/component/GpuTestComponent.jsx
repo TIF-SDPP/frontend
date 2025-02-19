@@ -39,6 +39,7 @@ export default function GpuWorker() {
       number: randomNumber,
       processing_time: processingTime,
       user_id: user.sub,
+      worker_type: "worker_user"
     };
   }
 

@@ -7,6 +7,7 @@ import LogoutButton from "./component/login/LogoutButton";
 import { useAuth0 } from "@auth0/auth0-react";
 import MainLayout from "./component/layout/MainLayout";
 import { ToastContainer } from "react-toastify";
+import Home from "./component/home";
 
 function App() {
   const { user, isAuthenticated } = useAuth0();
@@ -24,7 +25,7 @@ function App() {
         //   <h2>{user.name}</h2>
         //   <p>{user.email}</p> */}
         // </div>
-        <LoginButton />
+        <Home/>
       )}
     </>
   );
