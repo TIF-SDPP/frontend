@@ -5,7 +5,11 @@ import { useAuth0 } from "@auth0/auth0-react";
 export default function GpuWorker() {
   const [ws, setWs] = useState(null);
   const { user } = useAuth0();
-  const workerIdRef = useRef(`worker-${Math.random().toString(36).substring(7)}`);
+  const workerIdRef = useRef(
+    `worker-${Math.random().toString(36).substring(7)}`
+  );
+  const COORDINADOR_HOST = import.meta.env.VITE_COORDINADOR_HOST;
+  const POOL_MANAGER_HOST = import.meta.env.VITE_POOL_MANAGER_HOST;
 
   useEffect(() => {
     return () => {
@@ -40,7 +44,7 @@ export default function GpuWorker() {
       processing_time: processingTime,
       user_id: user.sub,
       worker_user: "true",
-      worker_type: "worker_user"
+      worker_type: "worker_user",
     };
   }
 
@@ -56,7 +60,7 @@ export default function GpuWorker() {
   }
 
   function sendResult(data) {
-    fetch("http://35.227.13.165:8080/solved_task", {
+    fetch(`${COORDINADOR_HOST}/solved_task`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -73,8 +77,8 @@ export default function GpuWorker() {
         worker_user: "true", // o "false" si no es un worker local
         worker_type: "worker_user", // o "worker_cpu" si es CPU
       };
-  
-      fetch("http://34.138.248.69:8080/keep_alive", {
+
+      fetch(`${POOL_MANAGER_HOST}/keep_alive`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -84,7 +88,6 @@ export default function GpuWorker() {
         .catch((err) => console.error("Error en keep_alive:", err));
     }
   }
-  
 
   const handleWebSocketOpen = () => {
     const websocket = new WebSocket("ws://localhost:8888");

@@ -9,6 +9,7 @@ const LeftOption = () => {
   const [amount, setAmount] = useState("");
   const { user, getAccessTokenSilently } = useAuth0();
   const [balance, setBalance] = useState("");
+  const COORDINADOR_HOST = import.meta.env.VITE_COORDINADOR_HOST;
 
   useEffect(() => {
     handleBalance();
@@ -38,7 +39,7 @@ const LeftOption = () => {
     }
 
     try {
-      const urlPost = "http://35.227.13.165:8080/transaction";
+      const urlPost = `${COORDINADOR_HOST}/transaction`;
 
       const request = {
         user_from: user.sub,
@@ -69,7 +70,7 @@ const LeftOption = () => {
       console.log("Token obtenido correctamente");
 
       const response = await fetch(
-        `http://35.227.13.165:8080/balance/${user.sub}`,
+        `${COORDINADOR_HOST}/balance/${user.sub}`,
         {
           method: "GET",
           headers: {
