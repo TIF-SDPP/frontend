@@ -38,7 +38,7 @@ const LeftOption = () => {
     }
 
     try {
-      const urlPost = "http://localhost:8090/transaction";
+      const urlPost = "http://35.227.13.165:8080/transaction";
 
       const request = {
         user_from: user.sub,
@@ -69,7 +69,7 @@ const LeftOption = () => {
       console.log("Token obtenido correctamente");
 
       const response = await fetch(
-        `http://localhost:8090/balance/${user.sub}`,
+        `http://35.227.13.165:8080/balance/${user.sub}`,
         {
           method: "GET",
           headers: {

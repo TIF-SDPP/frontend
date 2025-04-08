@@ -10,7 +10,7 @@ const Home = () => {
 
   const handleMetric = async () => {
     try {
-      const response = await fetch(`http://localhost:8090/metrics/`, {
+      const response = await fetch(`http://35.227.13.165:8080/metrics`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
