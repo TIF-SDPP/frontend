@@ -3,6 +3,7 @@ import LoginButton from "../login/LoginButton";
 import Graph_quantities from "./Graph_quantities";
 
 const Home = () => {
+  const COORDINADOR_HOST = import.meta.env.VITE_COORDINADOR_HOST;
   const [metric, setMetric] = useState(null);
   useEffect(() => {
     handleMetric();
@@ -10,7 +11,8 @@ const Home = () => {
 
   const handleMetric = async () => {
     try {
-      const response = await fetch(`http://35.227.13.165:8080/metrics`, {
+      
+      const response = await fetch(`${COORDINADOR_HOST}/metrics`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
