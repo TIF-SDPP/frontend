@@ -19,11 +19,13 @@ function GraphQuantities({ metric }) {
     cant: metric[name]?.cant || 0,
   }));
 
+  
   const timeWorker = workerNames.map((name) => ({
     name,
-    processing_time: (metric[name]?.processing_time || 0) / 1_000_000_000, // Convertir a segundos
+    processing_time: (metric[name]?.processing_time || 0), // Convertir a segundos
   }));
-
+  
+  console.log(metric)
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       <div style={{ textAlign: "center" }}>
