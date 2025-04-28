@@ -7,6 +7,7 @@ const LeftOption = () => {
   const [showPopup, setShowPopup] = useState(false);
   const [user_id, setUser_id] = useState("");
   const [amount, setAmount] = useState("");
+  const [privateKey, setPrivateKey] = useState(null);
   const { user, getAccessTokenSilently } = useAuth0();
   const [balance, setBalance] = useState("");
   const COORDINADOR_HOST = import.meta.env.VITE_COORDINADOR_HOST;
@@ -14,16 +15,48 @@ const LeftOption = () => {
   useEffect(() => {
     if (user) {
       checkOrCreateKeyPair(user.sub);
+      handleBalance();
     }
-    handleBalance();
   }, []);
 
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const privateKeyJwk = JSON.parse(event.target.result);
+        const importedKey = await window.crypto.subtle.importKey(
+          "jwk",
+          privateKeyJwk,
+          {
+            name: "ECDSA",
+            namedCurve: "P-256",
+          },
+          false,
+          ["sign"]
+        );
+        setPrivateKey(importedKey);
+        toast.success("Clave privada cargada correctamente ✅");
+      };
+      reader.readAsText(file);
+    // eslint-disable-next-line no-unused-vars
+    } catch (err) {
+      toast.error("Error al cargar la clave privada");
+    }
+  };
+
   const handleSubmit = async () => {
-    let response;
+    if (!privateKey) {
+      toast.error("Debe cargar su clave privada antes de enviar");
+      return;
+    }
+
     try {
       const accessToken = import.meta.env.VITE_TOKEN;
-  
-      response = await fetch(
+
+      const response = await fetch(
         `https://blockchainsd.us.auth0.com/api/v2/users/${user_id}`,
         {
           method: "GET",
@@ -33,21 +66,14 @@ const LeftOption = () => {
           },
         }
       );
-  
+
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
-    } catch (error) {
-      toast.error("El usuario no existe");
-      return;
-    }
-  
-    try {
+
       const urlPost = `${COORDINADOR_HOST}/transaction`;
       const message = `${user.sub}-${user_id}-${amount}`;
-      console.log("Mensaje para firmar:", message);
-      const signature = await signTransaction(user.sub, message);
-      console.log("Firma generada:", signature);
+      const signature = await signTransaction(privateKey, message);
 
       const request = {
         user_from: user.sub,
@@ -56,31 +82,25 @@ const LeftOption = () => {
         signature: signature,
         message: message
       };
-    
-      console.log("Transacción enviada:", request);
 
-      const postResponse = fetchPost(urlPost, request);
-      console.log(postResponse);
-  
+      const data = await fetchPost(urlPost, request);
+      console.log(data);
+      
+      if (data.status) {
+        toast.success("Transferencia enviada ✅");
+      } else {
+        toast.error("Error en la transferencia: " + (data.data || "Error desconocido"));
+      }
       setShowPopup(false);
+    // eslint-disable-next-line no-unused-vars
     } catch (error) {
       toast.error("Error en la transferencia");
-      return;
     }
   };
-  
+
   const handleBalance = async () => {
     try {
       const token = await getAccessTokenSilently();
-
-      if (!token) {
-        console.error("Error: No se pudo obtener el token de acceso.");
-        return;
-      }
-      console.log(token);
-
-      console.log("Token obtenido correctamente");
-
       const response = await fetch(
         `${COORDINADOR_HOST}/balance/${user.sub}`,
         {
@@ -97,7 +117,6 @@ const LeftOption = () => {
       }
 
       const data = await response.json();
-      console.log("Balance recibido:", data);
       setBalance(data.balance);
     } catch (error) {
       console.error("Error en handleBalance:", error);
@@ -105,15 +124,16 @@ const LeftOption = () => {
   };
 
   const checkOrCreateKeyPair = async (userId) => {
-    const existing = localStorage.getItem(`privateKey-${userId}`);
-    if (existing) {
-      console.log("✅ Ya existe un par de claves para este usuario");
-      //return;
-    }
-
     const token = await getAccessTokenSilently();
 
-    // Generar clave nueva
+    const checkResponse = await fetch(`${COORDINADOR_HOST}/key_exists/${userId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const { exists } = await checkResponse.json();
+    if (exists) return;
+
+    console.log(exists);
+
     const keyPair = await window.crypto.subtle.generateKey(
       {
         name: "ECDSA",
@@ -122,16 +142,10 @@ const LeftOption = () => {
       true,
       ["sign", "verify"]
     );
-  
-    // Exportar la clave privada (en formato JSON Web Key)
+
     const privateKeyJwk = await window.crypto.subtle.exportKey("jwk", keyPair.privateKey);
     const publicKeyJwk = await window.crypto.subtle.exportKey("jwk", keyPair.publicKey);
-    console.log("Clave pública generada:", publicKeyJwk);
 
-    // Guardar clave privada localmente
-    localStorage.setItem(`privateKey-${userId}`, JSON.stringify(privateKeyJwk));
-  
-    // Enviar la clave pública al backend para registrarla en la blockchain
     const response = await fetch(`${COORDINADOR_HOST}/register_key`, {
       method: "POST",
       headers: {
@@ -143,58 +157,46 @@ const LeftOption = () => {
         public_key: publicKeyJwk,
       }),
     });
-  
+
     if (response.ok) {
-      console.log("📝 Clave pública registrada exitosamente");
-    } else {
-      console.error("❌ Error al registrar la clave pública");
+      const blob = new Blob([JSON.stringify(privateKeyJwk)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `clave-privada-${userId}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast.success("Clave privada generada y descargada. Guardala bien.");
     }
   };
 
-  const signTransaction = async (userId, message) => {
-    const privateKeyJwk = JSON.parse(localStorage.getItem(`privateKey-${userId}`));
-  
-    const privateKey = await window.crypto.subtle.importKey(
-      "jwk",
-      privateKeyJwk,
-      {
-        name: "ECDSA",
-        namedCurve: "P-256",
-      },
-      false,
-      ["sign"]
-    );
-  
+  const signTransaction = async (key, message) => {
     const encoder = new TextEncoder();
     const encoded = encoder.encode(message);
-    const hash = await crypto.subtle.digest("SHA-256", encoded);
-    console.log("Hash SHA-256 del mensaje:", Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join(''));
-
     const signature = await window.crypto.subtle.sign(
       {
         name: "ECDSA",
         hash: { name: "SHA-256" },
       },
-      privateKey,
+      key,
       encoded
     );
-  
-    // Convert ArrayBuffer to Base64 correctly
-    const base64Signature = arrayBufferToBase64(signature);
-    return base64Signature;
+
+    return arrayBufferToBase64(signature);
   };
-  
-  function arrayBufferToBase64(buffer) {
+
+  const arrayBufferToBase64 = (buffer) => {
     return btoa(
       Array.from(new Uint8Array(buffer))
-        .map(b => String.fromCharCode(b))
+        .map((b) => String.fromCharCode(b))
         .join("")
     );
-  }
-  
+  };
+
   return (
     <>
-      <div> ${balance}</div>
+      <div>${balance}</div>
       <div onClick={() => setShowPopup(true)} style={{ cursor: "pointer" }}>
         Transferencia
       </div>
@@ -203,24 +205,30 @@ const LeftOption = () => {
         <div className="popup-overlay">
           <div className="popup">
             <h2>Transferencia</h2>
+
             <label>
               user_id:
               <input
                 type="text"
-                placeholder="Ingrese su user_id"
                 value={user_id}
                 onChange={(e) => setUser_id(e.target.value)}
               />
             </label>
+
             <label>
               Monto:
               <input
                 type="number"
-                placeholder="Ingrese el monto"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
             </label>
+
+            <label>
+              Clave Privada:
+              <input type="file" accept=".json" onChange={handleFileUpload} />
+            </label>
+
             <button onClick={handleSubmit}>Enviar</button>
             <button onClick={() => setShowPopup(false)}>Cerrar</button>
           </div>

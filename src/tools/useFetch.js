@@ -84,14 +84,15 @@ export async function fetchPost(url, data) {
       body: JSON.stringify(data),
     });
 
+    const responseData = await response.json();
+
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      return { status: false, data: responseData.error || "Error desconocido" };
     }
 
-    const responseData = await response.json();
     return { status: true, data: responseData };
-  } catch {
-    return { status: false, data: null };
+  } catch (err) {
+    return { status: false, data: err.message || "Error de red" };
   }
 }
 
