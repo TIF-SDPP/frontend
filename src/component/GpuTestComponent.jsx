@@ -3,60 +3,61 @@ import { toast } from "react-toastify";
 import { useAuth0 } from "@auth0/auth0-react";
 
 export default function GpuWorker() {
-  const [ws, setWs] = useState(null);
   const { user } = useAuth0();
-  const workerIdRef = useRef(
-    `worker-${Math.random().toString(36).substring(7)}`
-  );
+  const wsRef = useRef(null);
+  const workerIdRef = useRef(`worker-${Math.random().toString(36).substring(7)}`);
+  const [connected, setConnected] = useState(false);
+
   const COORDINADOR_HOST = import.meta.env.VITE_COORDINADOR_HOST;
   const POOL_MANAGER_HOST = import.meta.env.VITE_POOL_MANAGER_HOST;
+  const WS_HOST = import.meta.env.VITE_WS_HOST || "ws://localhost:8888";
 
   useEffect(() => {
     return () => {
-      if (ws) {
-        ws.close();
-      }
+      wsRef.current?.close();
     };
-  }, [ws]);
+  }, []);
 
-  async function processBlock(data) {
-    let found = false;
-    const startTime = performance.now();
-    let hash = "";
-    let randomNumber = "";
-
-    while (!found) {
-      randomNumber = (
-        Math.floor(Math.random() * (data.random_end - data.random_start + 1)) +
-        data.random_start
-      ).toString();
-      const combinedData = `${randomNumber}${data.base_string_chain}${data.blockchain_content}`;
-      hash = enhancedHashGPU(combinedData);
-      if (hash.toString().startsWith(data.prefix)) {
-        found = true;
-      }
+  useEffect(() => {
+    if (connected) {
+      const interval = setInterval(sendKeepAlive, 10000);
+      return () => clearInterval(interval);
     }
-    const processingTime = (performance.now() - startTime) / 1000;
-    return {
-      ...data,
-      hash,
-      number: randomNumber,
-      processing_time: processingTime,
-      user_id: user.sub,
-      worker_user: "true",
-      worker_type: "worker_user",
+  }, [connected]);
+
+  function handleWebSocketOpen() {
+    if (wsRef.current) return;
+    const websocket = new WebSocket(WS_HOST);
+
+    websocket.onopen = () => {
+      toast.success("Conectado al WebSocket");
+      wsRef.current = websocket;
+      setConnected(true);
+    };
+
+    websocket.onmessage = async (event) => {
+      const data = JSON.parse(event.data);
+      toast.info("Mensaje recibido: Procesando...");
+      const result = await processBlock(data, user.sub);
+      sendResult(result);
+    };
+
+    websocket.onerror = (error) => {
+      toast.error("Error en WebSocket");
+      console.error("WebSocket Error:", error);
+    };
+
+    websocket.onclose = () => {
+      toast.warn("Conexión WebSocket cerrada");
+      wsRef.current = null;
+      setConnected(false);
     };
   }
 
-  function enhancedHashGPU(data) {
-    let hashVal = 0;
-    for (let i = 0; i < data.length; i++) {
-      hashVal = (hashVal * 31 + data.charCodeAt(i)) % 2 ** 32;
-      hashVal ^= ((hashVal << 13) | (hashVal >>> 19)) >>> 0;
-      hashVal = (hashVal * 17) % 2 ** 32;
-      hashVal = ((hashVal << 5) | (hashVal >>> 27)) >>> 0;
-    }
-    return hashVal.toString(16).padStart(8, "0");
+  function handleWebSocketClose() {
+    wsRef.current?.close();
+    wsRef.current = null;
+    setConnected(false);
   }
 
   function sendResult(data) {
@@ -71,82 +72,73 @@ export default function GpuWorker() {
   }
 
   function sendKeepAlive() {
-    if (ws) {
-      const data = {
-        worker_id: workerIdRef.current,
-        worker_user: "true", // o "false" si no es un worker local
-        worker_type: "worker_user", // o "worker_cpu" si es CPU
-      };
+    const data = {
+      worker_id: workerIdRef.current,
+      worker_user: "true",
+      worker_type: "worker_user",
+    };
 
-      fetch(`${POOL_MANAGER_HOST}/keep_alive`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      })
-        .then((res) => res.text())
-        .then((text) => console.log("Keep alive response:", text))
-        .catch((err) => console.error("Error en keep_alive:", err));
-    }
+    fetch(`${POOL_MANAGER_HOST}/keep_alive`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    })
+      .then((res) => res.text())
+      .then((text) => console.log("Keep alive response:", text))
+      .catch((err) => console.error("Error en keep_alive:", err));
   }
 
-  const handleWebSocketOpen = () => {
-    const websocket = new WebSocket("ws://localhost:8888");
-
-    websocket.onopen = () => {
-      toast.success("Conectado al WebSocket");
-      setWs(websocket);
-    };
-
-    websocket.onmessage = async (event) => {
-      const data = JSON.parse(event.data);
-      toast.info("Mensaje recibido: Procesando...");
-
-      // Procesamos el bloque de datos sin esperar el resultado del keep alive
-      const result = await processBlock(data);
-      sendResult(result);
-    };
-
-    websocket.onerror = (error) => {
-      toast.error("Error en WebSocket: " + error.message);
-    };
-
-    websocket.onclose = () => {
-      toast.warn("Conexión WebSocket cerrada");
-      setWs(null);
-    };
-  };
-
-  const handleWebSocketClose = () => {
-    if (ws) {
-      ws.close();
-      setWs(null);
-    }
-  };
-
-  const handleButtonClick = () => {
-    if (ws) {
-      handleWebSocketClose();
-    } else {
-      handleWebSocketOpen();
-    }
-  };
-
-  useEffect(() => {
-    if (ws) {
-      const interval = setInterval(() => {
-        sendKeepAlive();
-      }, 10000); // Se manda cada 10 segundos
-
-      return () => clearInterval(interval);
-    }
-  }, [ws]); // Este effect se dispara cuando el WebSocket está activo
-
   return (
-    <button
-      onClick={handleButtonClick}
-      style={{ padding: "10px", fontSize: "16px" }}
-    >
-      {ws ? "Worker end" : "Worker start"}
-    </button>
+    <div style={{ textAlign: "center" }}>
+      <button
+        onClick={connected ? handleWebSocketClose : handleWebSocketOpen}
+        style={{ padding: "10px", fontSize: "16px" }}
+      >
+        {connected ? "Worker End" : "Worker Start"}
+      </button>
+      <div style={{ marginTop: "10px" }}>
+        Estado: {connected ? "🟢 Conectado" : "🔴 Desconectado"}
+      </div>
+    </div>
   );
+}
+
+// Funciones utilitarias afuera
+async function processBlock(data, userId) {
+  let found = false;
+  const startTime = performance.now();
+  let hash = "";
+  let randomNumber = "";
+
+  while (!found) {
+    randomNumber = (
+      Math.floor(Math.random() * (data.random_end - data.random_start + 1)) + data.random_start
+    ).toString();
+    const combinedData = `${randomNumber}${data.base_string_chain}${data.blockchain_content}`;
+    hash = enhancedHashGPU(combinedData);
+    if (hash.startsWith(data.prefix)) {
+      found = true;
+    }
+  }
+  const processingTime = (performance.now() - startTime) / 1000;
+  return {
+    ...data,
+    hash,
+    number: randomNumber,
+    processing_time: processingTime,
+    user_id: userId,
+    worker_user: "true",
+    worker_type: "worker_user",
+  };
+}
+
+function enhancedHashGPU(data) {
+  let hashVal = 0;
+  for (let i = 0; i < data.length; i++) {
+    hashVal = (hashVal * 31 + data.charCodeAt(i)) % 2 ** 32;
+    hashVal ^= ((hashVal << 13) | (hashVal >>> 19)) >>> 0;
+    hashVal = (hashVal * 17) % 2 ** 32;
+    hashVal = ((hashVal << 5) | (hashVal >>> 27)) >>> 0;
+  }
+  return hashVal.toString(16).padStart(8, "0");
 }

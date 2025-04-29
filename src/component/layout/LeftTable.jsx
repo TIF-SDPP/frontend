@@ -1,28 +1,36 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import { toast } from "react-toastify";
 import { fetchPost } from "../../tools/useFetch";
+import './css/LeftTable.css';
 
 const LeftOption = () => {
   const [showPopup, setShowPopup] = useState(false);
   const [user_id, setUser_id] = useState("");
   const [amount, setAmount] = useState("");
-  const [privateKey, setPrivateKey] = useState(null);
+  const privateKeyRef = useRef(null);
   const { user, getAccessTokenSilently } = useAuth0();
   const [balance, setBalance] = useState("");
+  const prevBalanceRef = useRef(balance);
   const COORDINADOR_HOST = import.meta.env.VITE_COORDINADOR_HOST;
 
   useEffect(() => {
     if (user) {
       checkOrCreateKeyPair(user.sub);
-      handleBalance();
+      handleBalance(); // llamada inicial
+  
+      const intervalId = setInterval(() => {
+        handleBalance(); // llamada periódica
+      }, 10000); // cada 10 segundos (10000ms)
+  
+      return () => clearInterval(intervalId); // limpieza al desmontar
     }
-  }, []);
+  }, [user]);
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
+  
     try {
       const reader = new FileReader();
       reader.onload = async (event) => {
@@ -30,75 +38,75 @@ const LeftOption = () => {
         const importedKey = await window.crypto.subtle.importKey(
           "jwk",
           privateKeyJwk,
-          {
-            name: "ECDSA",
-            namedCurve: "P-256",
-          },
+          { name: "ECDSA", namedCurve: "P-256" },
           false,
           ["sign"]
         );
-        setPrivateKey(importedKey);
+        privateKeyRef.current = importedKey;
         toast.success("Clave privada cargada correctamente ✅");
       };
       reader.readAsText(file);
-    // eslint-disable-next-line no-unused-vars
     } catch (err) {
+      console.error(err);
       toast.error("Error al cargar la clave privada");
     }
   };
 
   const handleSubmit = async () => {
-    if (!privateKey) {
+    if (!privateKeyRef.current) {
       toast.error("Debe cargar su clave privada antes de enviar");
       return;
     }
-
+    if (!user_id || !amount || isNaN(amount) || Number(amount) <= 0) {
+      toast.error("Complete todos los campos correctamente");
+      return;
+    }
+  
     try {
       const accessToken = import.meta.env.VITE_TOKEN;
-
-      const response = await fetch(
-        `https://blockchainsd.us.auth0.com/api/v2/users/${user_id}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
+      const response = await fetch(`https://blockchainsd.us.auth0.com/api/v2/users/${user_id}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+  
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
-
+  
       const urlPost = `${COORDINADOR_HOST}/transaction`;
       const message = `${user.sub}-${user_id}-${amount}`;
-      const signature = await signTransaction(privateKey, message);
-
+      const signature = await signTransaction(privateKeyRef.current, message);
+  
       const request = {
         user_from: user.sub,
         user_to: user_id,
-        amount: amount,
-        signature: signature,
-        message: message
+        amount,
+        signature,
+        message,
       };
 
       const data = await fetchPost(urlPost, request);
-      console.log(data);
-      
+
       if (data.status) {
         toast.success("Transferencia enviada ✅");
+        setShowPopup(false);
+        setAmount("");
+        setUser_id("");
       } else {
         toast.error("Error en la transferencia: " + (data.data || "Error desconocido"));
       }
-      setShowPopup(false);
-    // eslint-disable-next-line no-unused-vars
     } catch (error) {
-      toast.error("Error en la transferencia");
+      console.error(error);
+      toast.error(`Error en la transferencia: ${error.message || "desconocido"}`);
     }
   };
 
   const handleBalance = async () => {
+    if (!user) return;
+  
     try {
       const token = await getAccessTokenSilently();
       const response = await fetch(
@@ -111,17 +119,32 @@ const LeftOption = () => {
           },
         }
       );
-
+  
       if (!response.ok) {
         throw new Error(`Error en la solicitud: ${response.statusText}`);
       }
-
+  
       const data = await response.json();
-      setBalance(data.balance);
+      const previousBalance = prevBalanceRef.current; // 🔥 leo el último balance manual
+      const newBalance = data.balance;
+  
+      if (newBalance !== previousBalance) {
+        const delta = newBalance - previousBalance;
+        const message = delta > 0
+          ? `💰 ¡Te llegaron $${delta}!`
+          : `📉 Gastaste $${Math.abs(delta)}`;
+  
+        toast.info(message);
+      }
+  
+      setBalance(newBalance);
+      prevBalanceRef.current = newBalance; // 🔥 actualizo el ref manualmente
+  
     } catch (error) {
       console.error("Error en handleBalance:", error);
     }
   };
+  
 
   const checkOrCreateKeyPair = async (userId) => {
     const token = await getAccessTokenSilently();
@@ -196,8 +219,8 @@ const LeftOption = () => {
 
   return (
     <>
-      <div>${balance}</div>
-      <div onClick={() => setShowPopup(true)} style={{ cursor: "pointer" }}>
+      <div className="balance-display">${balance}</div>
+      <div className="transfer-button" onClick={() => setShowPopup(true)}>
         Transferencia
       </div>
 
