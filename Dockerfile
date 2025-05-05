@@ -1,15 +1,21 @@
 FROM node:23-alpine
 
+# Crear directorio de trabajo
 WORKDIR /app
 
-
+# Copiar dependencias e instalar
 COPY package*.json ./
 RUN npm install
 
+# Copiar todo y construir la app
 COPY . .
+RUN npm run build
 
+# Instalar el servidor de archivos estáticos
 RUN npm install -g serve
 
-EXPOSE 5173
+# Exponer el puerto que serve usará
+EXPOSE 8080
 
-CMD ["npm", "run", "dev", "--", "--host"]
+# Servir la app desde la carpeta dist o build (según el framework)
+CMD ["serve", "-s", "dist", "-l", "8080"]

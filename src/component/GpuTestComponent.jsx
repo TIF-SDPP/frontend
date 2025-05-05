@@ -10,7 +10,7 @@ export default function GpuWorker() {
 
   const COORDINADOR_HOST = import.meta.env.VITE_COORDINADOR_HOST;
   const POOL_MANAGER_HOST = import.meta.env.VITE_POOL_MANAGER_HOST;
-  const WS_HOST = import.meta.env.VITE_WS_HOST || "ws://localhost:8888";
+  const WS_HOST = import.meta.env.VITE_WS_HOST || "wss://ws.unlucoin.info";
 
   useEffect(() => {
     return () => {
