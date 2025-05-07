@@ -11,7 +11,7 @@ services:
     networks:
       - red_ej2
     ports:
-      - "5173:5173"
+      - "5173:80"
 
 networks:
   red_ej2:

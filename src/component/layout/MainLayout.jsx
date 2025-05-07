@@ -1,4 +1,3 @@
-import React from "react";
 import LeftSide from "./LeftSide";
 import LogoutButton from "../login/LogoutButton";
 import GpuTestComponent from "../GpuTestComponent";

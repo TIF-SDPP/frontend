@@ -30,25 +30,25 @@ export default function GpuWorker() {
     const websocket = new WebSocket(WS_HOST);
 
     websocket.onopen = () => {
-      toast.success("Conectado al WebSocket");
+      toast.success("🟢 Conectado al WebSocket");
       wsRef.current = websocket;
       setConnected(true);
     };
 
     websocket.onmessage = async (event) => {
       const data = JSON.parse(event.data);
-      toast.info("Mensaje recibido: Procesando...");
-      const result = await processBlock(data, user.sub);
+      toast.info("🔧 Procesando tarea...");
+      const result = await processBlockWithGPU(data, user.sub);
       sendResult(result);
     };
 
     websocket.onerror = (error) => {
-      toast.error("Error en WebSocket");
+      toast.error("❌ Error en WebSocket");
       console.error("WebSocket Error:", error);
     };
 
     websocket.onclose = () => {
-      toast.warn("Conexión WebSocket cerrada");
+      toast.warn("🔌 WebSocket desconectado");
       wsRef.current = null;
       setConnected(false);
     };
@@ -67,8 +67,8 @@ export default function GpuWorker() {
       body: JSON.stringify(data),
     })
       .then((res) => res.text())
-      .then((text) => toast.success("Resultado enviado: " + text))
-      .catch((err) => toast.error("Error enviando resultado: " + err));
+      .then((text) => toast.success("✅ Resultado enviado: " + text))
+      .catch((err) => toast.error("❌ Error enviando resultado: " + err));
   }
 
   function sendKeepAlive() {
@@ -103,28 +103,169 @@ export default function GpuWorker() {
   );
 }
 
-// Funciones utilitarias afuera
-async function processBlock(data, userId) {
-  let found = false;
+async function processBlockWithGPU(data, userId) {
   const startTime = performance.now();
-  let hash = "";
-  let randomNumber = "";
+  const TIMEOUT = 20 * 60 * 1000; // 20 minutos
 
-  while (!found) {
-    randomNumber = (
-      Math.floor(Math.random() * (data.random_end - data.random_start + 1)) + data.random_start
-    ).toString();
-    const combinedData = `${randomNumber}${data.base_string_chain}${data.blockchain_content}`;
-    hash = enhancedHashGPU(combinedData);
-    if (hash.startsWith(data.prefix)) {
-      found = true;
+  if (!navigator.gpu) {
+    toast.error("🚫 WebGPU no está disponible en este navegador.");
+    return processWithCPU(data, userId);
+  }
+
+  const adapter = await navigator.gpu.requestAdapter();
+  const device = await adapter.requestDevice();
+
+  const ENTRY_SIZE = 128;
+  const batch_size = 10000;  // Tamaño del lote
+
+  const encoder = new TextEncoder(); // Codificador UTF-8
+  const rangeSize = data.random_end - data.random_start;
+  
+  let found = false;
+  let selectedNumber = "";
+  let hash = "";
+
+  // Proceso por lotes
+  for (let i = 0; i < rangeSize; i += batch_size) {
+    const batchEnd = Math.min(i + batch_size, rangeSize);
+    const randomNumbers = [];
+
+    // Generar números aleatorios en el rango para el lote actual
+    for (let j = i; j < batchEnd; j++) {
+      const randomNum = Math.floor(Math.random() * (data.random_end - data.random_start + 1)) + data.random_start;
+      randomNumbers.push(randomNum.toString());
+    }
+
+    // Combinar datos con los números generados
+    const combinedData = randomNumbers.map(rn => `${rn}${data.base_string_chain}${data.blockchain_content}`);
+    
+    // Enviar a WebGPU para procesar este lote con el shader
+    const inputs = new Uint32Array(batch_size * (ENTRY_SIZE / 4));
+
+    for (let j = 0; j < randomNumbers.length; j++) {
+      const encoded = encoder.encode(combinedData[j]);
+
+      for (let k = 0; k < ENTRY_SIZE; k++) {
+        const byte = encoded[k] || 0;
+        const wordIndex = Math.floor(k / 4);
+        const byteOffset = k % 4;
+        inputs[j * (ENTRY_SIZE / 4) + wordIndex] |= byte << (8 * byteOffset);
+      }
+    }
+
+    // Crear buffers para WebGPU
+    const inputBuffer = device.createBuffer({
+      size: inputs.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      mappedAtCreation: true,
+    });
+
+    new Uint32Array(inputBuffer.getMappedRange()).set(inputs);
+    inputBuffer.unmap();
+
+    const outputBuffer = device.createBuffer({
+      size: batch_size * 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+
+    const resultBuffer = device.createBuffer({
+      size: batch_size * 4,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+
+    const shaderModule = device.createShaderModule({
+      code: `
+        @group(0) @binding(0) var<storage, read> input : array<u32>;
+        @group(0) @binding(1) var<storage, read_write> output : array<u32>;
+
+        const ENTRY_SIZE: u32 = 128u;
+
+        fn enhanced_hash(offset: u32) -> u32 {
+            var hash: u32 = 0u;
+            var i: u32 = 0u;
+            loop {
+                if (i >= ENTRY_SIZE) { break; }
+
+                let wordIndex: u32 = i / 4u;
+                let byteOffset: u32 = (i % 4u) * 8u;
+                let byte = (input[offset + wordIndex] >> byteOffset) & 0xFFu;
+
+                if (byte == 0u) { break; }
+
+                hash = (hash * 31u + byte) & 0xFFFFFFFFu;
+                hash = hash ^ ((hash << 13u) | (hash >> 19u));
+                hash = (hash * 17u) & 0xFFFFFFFFu;
+                hash = ((hash << 5u) | (hash >> 27u)) & 0xFFFFFFFFu;
+                i = i + 1u;
+            }
+            return hash;
+        }
+
+        @compute @workgroup_size(64)
+        fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
+            let i = GlobalInvocationID.x;
+            let offset = i * (ENTRY_SIZE / 4u);
+            output[i] = enhanced_hash(offset);
+        }
+      `,
+    });
+
+    const pipeline = device.createComputePipeline({
+      layout: "auto",
+      compute: {
+        module: shaderModule,
+        entryPoint: "main",
+      },
+    });
+
+    const bindGroup = device.createBindGroup({
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: inputBuffer } },
+        { binding: 1, resource: { buffer: outputBuffer } },
+      ],
+    });
+
+    const commandEncoder = device.createCommandEncoder();
+    const pass = commandEncoder.beginComputePass();
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(batch_size / 64));
+    pass.end();
+
+    commandEncoder.copyBufferToBuffer(outputBuffer, 0, resultBuffer, 0, batch_size * 4);
+    device.queue.submit([commandEncoder.finish()]);
+
+    await resultBuffer.mapAsync(GPUMapMode.READ);
+    const resultArray = new Uint32Array(resultBuffer.getMappedRange());
+
+    // Verificar los hashes
+    for (let k = 0; k < resultArray.length; k++) {
+      const candidate = randomNumbers[k];
+      const candidateHash = resultArray[k];
+      const hexHash = candidateHash.toString(16).padStart(8, "0");
+
+      if (hexHash.startsWith(data.prefix)) {
+        found = true;
+        selectedNumber = candidate.toString();
+        hash = hexHash;
+        break;
+      }
+    }
+
+    resultBuffer.unmap();
+
+    if (found || performance.now() - startTime > TIMEOUT) {
+      break;
     }
   }
+
   const processingTime = (performance.now() - startTime) / 1000;
+
   return {
     ...data,
     hash,
-    number: randomNumber,
+    number: selectedNumber,
     processing_time: processingTime,
     user_id: userId,
     worker_user: "true",
@@ -132,7 +273,49 @@ async function processBlock(data, userId) {
   };
 }
 
-function enhancedHashGPU(data) {
+// Si WebGPU no está disponible, usamos la CPU
+function processWithCPU(data, userId) {
+  const startTime = performance.now();
+  const TIMEOUT = 20 * 60 * 1000; // 20 minutos
+
+  let selectedNumber = "";
+  let hash = "";
+
+  const rangeSize = data.random_end - data.random_start;
+
+  // Proceso por lotes
+  for (let i = 0; i < rangeSize; i++) {
+    const randomNum = Math.floor(Math.random() * (data.random_end - data.random_start + 1)) + data.random_start;
+    const combinedData = `${randomNum}${data.base_string_chain}${data.blockchain_content}`;
+    
+    const candidateHash = enhancedHashCPU(combinedData);
+
+    // Verificar si el hash empieza con el prefijo
+    if (candidateHash.startsWith(data.prefix)) {
+      selectedNumber = randomNum.toString();
+      hash = candidateHash;
+      break;
+    }
+
+    if (performance.now() - startTime > TIMEOUT) {
+      break;
+    }
+  }
+
+  const processingTime = (performance.now() - startTime) / 1000;
+
+  return {
+    ...data,
+    hash,
+    number: selectedNumber,
+    processing_time: processingTime,
+    user_id: userId,
+    worker_user: "true",
+    worker_type: "worker_cpu",
+  };
+}
+
+function enhancedHashCPU(data) {
   let hashVal = 0;
   for (let i = 0; i < data.length; i++) {
     hashVal = (hashVal * 31 + data.charCodeAt(i)) % 2 ** 32;
@@ -142,3 +325,20 @@ function enhancedHashGPU(data) {
   }
   return hashVal.toString(16).padStart(8, "0");
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
