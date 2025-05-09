@@ -113,10 +113,13 @@ async function processBlockWithGPU(data, userId) {
   }
 
   const adapter = await navigator.gpu.requestAdapter();
+  console.log("Adapter:", adapter);
+  console.log("Adapter features:", Array.from(adapter.features));
+  
   const device = await adapter.requestDevice();
 
   const ENTRY_SIZE = 128;
-  const batch_size = 10000;  // Tamaño del lote
+  const batch_size = 1000000;  // Tamaño del lote
 
   const encoder = new TextEncoder(); // Codificador UTF-8
   const rangeSize = data.random_end - data.random_start;
