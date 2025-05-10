@@ -37,7 +37,6 @@ export default function GpuWorker() {
 
     websocket.onmessage = async (event) => {
       const data = JSON.parse(event.data);
-      toast.info("🔧 Procesando tarea...");
       const result = await processBlockWithGPU(data, user.sub);
       sendResult(result);
     };
@@ -106,10 +105,11 @@ export default function GpuWorker() {
 async function processBlockWithGPU(data, userId) {
   const startTime = performance.now();
   const TIMEOUT = 20 * 60 * 1000; // 20 minutos
+  toast.info("🔧 Procesando tarea...");
 
   if (!navigator.gpu) {
-    toast.error("🚫 WebGPU no está disponible en este navegador.");
-    return processWithCPU(data, userId);
+    toast.error("🚫 WebGPU no está disponible en este navegador. Utilizando CPU...");
+    return await processWithCPU(data, userId);
   }
 
   const adapter = await navigator.gpu.requestAdapter();
@@ -119,7 +119,7 @@ async function processBlockWithGPU(data, userId) {
   const device = await adapter.requestDevice();
 
   const ENTRY_SIZE = 128;
-  const batch_size = 1000000;  // Tamaño del lote
+  const batch_size = 10000;  // Tamaño del lote
 
   const encoder = new TextEncoder(); // Codificador UTF-8
   const rangeSize = data.random_end - data.random_start;
@@ -127,6 +127,7 @@ async function processBlockWithGPU(data, userId) {
   let found = false;
   let selectedNumber = "";
   let hash = "";
+  let timeout = false;
 
   // Proceso por lotes
   for (let i = 0; i < rangeSize; i += batch_size) {
@@ -258,63 +259,89 @@ async function processBlockWithGPU(data, userId) {
 
     resultBuffer.unmap();
 
-    if (found || performance.now() - startTime > TIMEOUT) {
-      break;
+    if (found) {
+      const processingTime = (performance.now() - startTime) / 1000;
+
+      return {
+        ...data,
+        timeout,
+        hash,
+        number: selectedNumber,
+        processing_time: processingTime,
+        user_id: userId,
+        worker_user: "true",
+        worker_type: "worker_user",
+      };
+
     }
+
+    if (performance.now() - startTime > TIMEOUT) {
+      timeout = true
+
+      return {
+        ...data,
+        timeout
+      }
+    }
+
+  }
+
+  toast.warn("No se encontro resultado para esta tarea en el rango")
+}
+
+// Si WebGPU no está disponible, usamos la CPU
+async function processWithCPU(data, userId) {
+  const startTime = performance.now();
+  const TIMEOUT = 20 * 60 * 1000; // 20 minutos
+
+  const chunkSize = 10000; // Tamaño del subrango
+  let selectedNumber = "";
+  let hash = "";
+  let timeout = false;
+
+  let currentStart = data.random_start;
+  let currentEnd = data.random_end;
+
+  let found = false;
+
+  while (currentStart < currentEnd && !found) {
+    const chunkEnd = Math.min(currentStart + chunkSize, currentEnd);
+
+    for (let i = currentStart; i < chunkEnd; i++) {
+      const randomNum = i;
+      const combinedData = `${randomNum}${data.base_string_chain}${data.blockchain_content}`;
+      const candidateHash = enhancedHashCPU(combinedData);
+
+      if (candidateHash.startsWith(data.prefix)) {
+        selectedNumber = randomNum.toString();
+        hash = candidateHash;
+        found = true;
+        break;
+      }
+
+      if (performance.now() - startTime > TIMEOUT) {
+        timeout = true;
+        break;
+      }
+    }
+
+    currentStart += chunkSize;
+
+    // 🚨 Este respiro es clave
+    await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
   const processingTime = (performance.now() - startTime) / 1000;
 
   return {
     ...data,
+    timeout,
     hash,
     number: selectedNumber,
     processing_time: processingTime,
     user_id: userId,
     worker_user: "true",
     worker_type: "worker_user",
-  };
-}
-
-// Si WebGPU no está disponible, usamos la CPU
-function processWithCPU(data, userId) {
-  const startTime = performance.now();
-  const TIMEOUT = 20 * 60 * 1000; // 20 minutos
-
-  let selectedNumber = "";
-  let hash = "";
-
-  const rangeSize = data.random_end - data.random_start;
-
-  // Proceso por lotes
-  for (let i = 0; i < rangeSize; i++) {
-    const randomNum = Math.floor(Math.random() * (data.random_end - data.random_start + 1)) + data.random_start;
-    const combinedData = `${randomNum}${data.base_string_chain}${data.blockchain_content}`;
-    
-    const candidateHash = enhancedHashCPU(combinedData);
-
-    // Verificar si el hash empieza con el prefijo
-    if (candidateHash.startsWith(data.prefix)) {
-      selectedNumber = randomNum.toString();
-      hash = candidateHash;
-      break;
-    }
-
-    if (performance.now() - startTime > TIMEOUT) {
-      break;
-    }
-  }
-
-  const processingTime = (performance.now() - startTime) / 1000;
-
-  return {
-    ...data,
-    hash,
-    number: selectedNumber,
-    processing_time: processingTime,
-    user_id: userId,
-    worker_user: "true",
-    worker_type: "worker_cpu",
   };
 }
 
