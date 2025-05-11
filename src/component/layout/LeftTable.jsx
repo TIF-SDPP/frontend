@@ -77,15 +77,20 @@ const LeftOption = () => {
       }
   
       const urlPost = `${COORDINADOR_HOST}/transaction`;
-      const message = `${user.sub}-${user_id}-${amount}`;
-      const signature = await signTransaction(privateKeyRef.current, message);
   
-      const request = {
+      const transaction = {
         user_from: user.sub,
         user_to: user_id,
-        amount,
-        signature,
-        message,
+        amount
+      };
+
+      const signature = await signTransaction(privateKeyRef.current, transaction);
+
+      const request = {
+        transaction: {
+          ...transaction,
+        },
+        signature
       };
 
       const data = await fetchPost(urlPost, request);
@@ -194,7 +199,9 @@ const LeftOption = () => {
     }
   };
 
-  const signTransaction = async (key, message) => {
+  const signTransaction = async (key, transaction) => {
+      const message = `${transaction.user_from}|${transaction.user_to}|${transaction.amount}`;
+    
     const encoder = new TextEncoder();
     const encoded = encoder.encode(message);
     const signature = await window.crypto.subtle.sign(

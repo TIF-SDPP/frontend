@@ -26,7 +26,8 @@ export default function GpuWorker() {
   }, [connected]);
 
   function handleWebSocketOpen() {
-    if (wsRef.current) return;
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) return;
+
     const websocket = new WebSocket(WS_HOST);
 
     websocket.onopen = () => {
@@ -111,7 +112,7 @@ async function processBlockWithGPU(data, userId) {
     toast.error("🚫 WebGPU no está disponible en este navegador. Utilizando CPU...");
     return await processWithCPU(data, userId);
   }
-
+  
   const adapter = await navigator.gpu.requestAdapter();
   console.log("Adapter:", adapter);
   console.log("Adapter features:", Array.from(adapter.features));
