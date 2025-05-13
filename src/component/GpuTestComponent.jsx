@@ -107,13 +107,14 @@ async function processBlockWithGPU(data, userId) {
   const startTime = performance.now();
   const TIMEOUT = 20 * 60 * 1000; // 20 minutos
   toast.info("🔧 Procesando tarea...");
+  console.log(navigator.gpu);
+  const adapter = await navigator.gpu.requestAdapter();
 
-  if (!navigator.gpu) {
+  if (!adapter) {
     toast.error("🚫 WebGPU no está disponible en este navegador. Utilizando CPU...");
     return await processWithCPU(data, userId);
   }
   
-  const adapter = await navigator.gpu.requestAdapter();
   console.log("Adapter:", adapter);
   console.log("Adapter features:", Array.from(adapter.features));
   
@@ -310,7 +311,7 @@ async function processWithCPU(data, userId) {
 
     for (let i = currentStart; i < chunkEnd; i++) {
       const randomNum = i;
-      const combinedData = `${randomNum}${data.base_string_chain}${data.blockchain_content}`;
+      const combinedData = `${randomNum}${  .base_string_chain}${data.blockchain_content}`;
       const candidateHash = enhancedHashCPU(combinedData);
 
       if (candidateHash.startsWith(data.prefix)) {
