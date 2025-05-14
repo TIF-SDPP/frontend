@@ -5,8 +5,8 @@ import GpuTestComponent from "../GpuTestComponent";
 const MainLayout = () => {
   return (
     <div className="mainLayout">
-      <GpuTestComponent />
       <LogoutButton />
+      <GpuTestComponent />
       <LeftSide />
     </div>
   );

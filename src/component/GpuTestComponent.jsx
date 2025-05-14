@@ -92,10 +92,10 @@ export default function GpuWorker() {
   }
 
   return (
-    <div style={{ textAlign: "center" }}>
+    <div >
       <button
         onClick={connected ? handleWebSocketClose : handleWebSocketOpen}
-        style={{ padding: "10px", fontSize: "16px" }}
+        style={{ marginTop: "10px", fontSize: "16px", width: "200px" }}
       >
         {connected ? "Worker End" : "Worker Start"}
       </button>
@@ -104,7 +104,7 @@ export default function GpuWorker() {
       </div>
             {isProcessing && (
         <div style={{ marginTop: "10px"}}>
-          🛠️ Resolviendo tarea... por favor espere.
+          🛠️ Resolviendo tarea...
         </div>
       )}
     </div>
