@@ -7,6 +7,7 @@ export default function GpuWorker() {
   const wsRef = useRef(null);
   const workerIdRef = useRef(`worker-${Math.random().toString(36).substring(7)}`);
   const [connected, setConnected] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const COORDINADOR_HOST = import.meta.env.VITE_COORDINADOR_HOST;
   const POOL_MANAGER_HOST = import.meta.env.VITE_POOL_MANAGER_HOST;
@@ -38,7 +39,9 @@ export default function GpuWorker() {
 
     websocket.onmessage = async (event) => {
       const data = JSON.parse(event.data);
+      setIsProcessing(true);
       const result = await processBlockWithGPU(data, user.sub);
+      setIsProcessing(false);
       sendResult(result);
     };
 
@@ -99,6 +102,11 @@ export default function GpuWorker() {
       <div style={{ marginTop: "10px" }}>
         Estado: {connected ? "🟢 Conectado" : "🔴 Desconectado"}
       </div>
+            {isProcessing && (
+        <div style={{ marginTop: "10px"}}>
+          🛠️ Resolviendo tarea... por favor espere.
+        </div>
+      )}
     </div>
   );
 }
@@ -296,45 +304,36 @@ async function processWithCPU(data, userId) {
   const startTime = performance.now();
   const TIMEOUT = 20 * 60 * 1000; // 20 minutos
 
-  const chunkSize = 10000; // Tamaño del subrango
   let selectedNumber = "";
   let hash = "";
   let timeout = false;
-
-  let currentStart = data.random_start;
-  let currentEnd = data.random_end;
+  let processingTime = TIMEOUT;
 
   let found = false;
 
-  while (currentStart < currentEnd && !found) {
-    const chunkEnd = Math.min(currentStart + chunkSize, currentEnd);
+  while (!found && !timeout) {
 
-    for (let i = currentStart; i < chunkEnd; i++) {
-      const randomNum = i;
-      const combinedData = `${randomNum}${  .base_string_chain}${data.blockchain_content}`;
-      const candidateHash = enhancedHashCPU(combinedData);
+    selectedNumber = (
+      Math.floor(Math.random() * (data.random_end - data.random_start + 1)) +
+      data.random_start
+    ).toString();
 
-      if (candidateHash.startsWith(data.prefix)) {
-        selectedNumber = randomNum.toString();
-        hash = candidateHash;
-        found = true;
-        break;
-      }
+    const combinedData = `${selectedNumber}${data.base_string_chain}${data.blockchain_content}`;
+    hash = enhancedHashCPU(combinedData);
 
-      if (performance.now() - startTime > TIMEOUT) {
-        timeout = true;
-        break;
-      }
+    if (hash.toString().startsWith(data.prefix)) {
+      found = true;
+      processingTime = (performance.now() - startTime) / 1000;
     }
 
-    currentStart += chunkSize;
-
-    // 🚨 Este respiro es clave
+    if (performance.now() - startTime > TIMEOUT) {
+      timeout = true;
+    }
+    
     await new Promise((resolve) => setTimeout(resolve, 0));
+
   }
-
-  const processingTime = (performance.now() - startTime) / 1000;
-
+  
   return {
     ...data,
     timeout,
@@ -363,9 +362,34 @@ function enhancedHashCPU(data) {
 
 
 
+  // while (currentStart < currentEnd && !found) {
+  //   const chunkEnd = Math.min(currentStart + chunkSize, currentEnd);
 
+  //   for (let i = currentStart; i < chunkEnd; i++) {
+  //     const randomNum = i;
+  //     const combinedData = `${randomNum}${data.base_string_chain}${data.blockchain_content}`;
+  //     const candidateHash = enhancedHashCPU(combinedData);
 
+  //     if (candidateHash.startsWith(data.prefix)) {
+  //       selectedNumber = randomNum.toString();
+  //       hash = candidateHash;
+  //       found = true;
+  //       break;
+  //     }
 
+  //     if ((i % 1000 === 0)) {
+  //       await new Promise((resolve) => setTimeout(resolve, 0));
+  //     }
+
+  //     if (performance.now() - startTime > TIMEOUT) {
+  //       timeout = true;
+  //       break;
+  //     }
+  //   }
+
+  //   currentStart += chunkSize;
+
+  // }
 
 
 
