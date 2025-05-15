@@ -12,54 +12,61 @@ import {
 function GraphQuantities({ metric }) {
   if (!metric) return null;
 
-  const workerNames = ["worker_cpu", "worker_gpu", "worker_user"];
+  const workerNames = ["worker_cpu", "worker_user"];
 
-  const cantWorker = workerNames.map((name) => ({
-    name,
-    cant: metric[name]?.cant || 0,
-  }));
-
-  
-  const timeWorker = workerNames.map((name) => ({
-    name,
-    processing_time: (metric[name]?.processing_time || 0), // Convertir a segundos
-  }));
-  
-  console.log(metric)
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      <div style={{ textAlign: "center" }}>
-        <h2>Cantidad de tareas procesadas por cada tipo de worker</h2>
-        <div style={{ width: 400, height: 300, margin: "auto" }}>
-          <ResponsiveContainer>
-            <BarChart data={cantWorker}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="cant" fill="#8884d8" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: "40px" }}>
+      {Object.entries(metric).map(([prefix, data]) => {
+        const cantWorker = workerNames.map((name) => ({
+          name,
+          cant: data[name]?.cant || 0,
+        }));
 
-      <div style={{ textAlign: "center" }}>
-        <h2>Tiempo promedio de procesamiento por tipo de worker</h2>
-        <div style={{ width: 400, height: 300, margin: "auto" }}>
-          <ResponsiveContainer>
-            <BarChart data={timeWorker}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis tickFormatter={(value) => `${value}s`} />
-              <Tooltip formatter={(value) => `${value.toFixed(2)} s`} />
-              <Bar dataKey="processing_time" fill="#82ca9d" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+        const timeWorker = workerNames.map((name) => ({
+          name,
+          processing_time: data[name]?.processing_time || 0,
+        }));
+
+        return (
+          <div key={prefix} style={{ border: "1px solid #ccc", padding: 20 }}>
+            <h2 style={{ textAlign: "center" }}>
+              Prefix: <code>{prefix}</code>
+            </h2>
+
+            <div style={{ textAlign: "center" }}>
+              <h3>Cantidad de tareas procesadas</h3>
+              <div style={{ width: 400, height: 300, margin: "auto" }}>
+                <ResponsiveContainer>
+                  <BarChart data={cantWorker}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="cant" fill="#8884d8" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div style={{ textAlign: "center", marginTop: 40 }}>
+              <h3>Tiempo promedio de procesamiento</h3>
+              <div style={{ width: 400, height: 300, margin: "auto" }}>
+                <ResponsiveContainer>
+                  <BarChart data={timeWorker}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis tickFormatter={(value) => `${value}s`} />
+                    <Tooltip formatter={(value) => `${value.toFixed(2)} s`} />
+                    <Bar dataKey="processing_time" fill="#82ca9d" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 export default GraphQuantities;
-
