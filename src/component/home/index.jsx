@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import LoginButton from "../login/LoginButton";
-import Graph_quantities from "./Graph_quantities";
+import GraphQuantities from "./Graph_quantities";
 
 const Home = () => {
   const COORDINADOR_HOST = import.meta.env.VITE_COORDINADOR_HOST;
@@ -11,7 +11,6 @@ const Home = () => {
 
   const handleMetric = async () => {
     try {
-      
       const response = await fetch(`${COORDINADOR_HOST}/metrics`, {
         method: "GET",
         headers: {
@@ -33,7 +32,7 @@ const Home = () => {
   return (
     <>
       <LoginButton />
-      <Graph_quantities metric={metric} />
+      <GraphQuantities metric={metric} />
     </>
   );
 };
