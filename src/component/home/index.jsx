@@ -30,10 +30,10 @@ const Home = () => {
   };
 
   return (
-    <>
+    <div style={{ boxSizing: "border-box", height: "100vh", overflow: "auto", padding: 20, width: "100vw" }}>
       <LoginButton />
       <GraphQuantities metric={metric} />
-    </>
+    </div>
   );
 };
 

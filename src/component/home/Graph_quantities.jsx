@@ -15,7 +15,7 @@ function GraphQuantities({ metric }) {
   const workerNames = ["worker_cpu", "worker_user"];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "40px" }}>
+    <div style={{ display: "flex", gap: "20px", overflow: "scroll" }}>
       {Object.entries(metric).map(([prefix, data]) => {
         const cantWorker = workerNames.map((name) => ({
           name,
@@ -28,13 +28,13 @@ function GraphQuantities({ metric }) {
         }));
 
         return (
-          <div key={prefix} style={{ border: "1px solid #ccc", padding: 20 }}>
-            <h2 style={{ textAlign: "center" }}>
+          <div key={prefix} style={{ border: "1px solid #ccc", height: "100%", padding: 20 }}>
+            <h2 style={{ margin: 0, textAlign: "center" }}>
               Prefix: <code>{prefix}</code>
             </h2>
 
             <div style={{ textAlign: "center" }}>
-              <h3>Cantidad de tareas procesadas</h3>
+              <h3 style={{ margin: 10 }}>Cantidad de tareas procesadas</h3>
               <div style={{ width: 400, height: 300, margin: "auto" }}>
                 <ResponsiveContainer>
                   <BarChart data={cantWorker}>
@@ -48,8 +48,8 @@ function GraphQuantities({ metric }) {
               </div>
             </div>
 
-            <div style={{ textAlign: "center", marginTop: 40 }}>
-              <h3>Tiempo promedio de procesamiento</h3>
+            <div style={{ textAlign: "center" }}>
+              <h3 style={{ margin: 10 }}>Tiempo promedio de procesamiento</h3>
               <div style={{ width: 400, height: 300, margin: "auto" }}>
                 <ResponsiveContainer>
                   <BarChart data={timeWorker}>
