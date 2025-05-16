@@ -69,7 +69,10 @@ export default function GpuWorker() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     })
-      .then((res) => res.text())
+      .then((res) => {
+        if (res.ok) return res.text();
+        throw new Error(res.status);
+      })
       .then((text) => toast.success("✅ Resultado enviado: " + text))
       .catch((err) => toast.error("❌ Error enviando resultado: " + err));
   }
@@ -86,7 +89,10 @@ export default function GpuWorker() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     })
-      .then((res) => res.text())
+      .then((res) => {
+        if (res.ok) return res.text();
+        throw new Error(res.status);
+      })
       .then((text) => console.log("Keep alive response:", text))
       .catch((err) => console.error("Error en keep_alive:", err));
   }
