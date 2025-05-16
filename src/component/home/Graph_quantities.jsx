@@ -9,6 +9,11 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
+/**
+ * Cantidad mínima de ceros cuyos gráficos se dibujarán.
+ */
+const MIN_ZEROS = 4;
+
 function GraphQuantities({ metric }) {
   if (!metric) return null;
 
@@ -17,6 +22,7 @@ function GraphQuantities({ metric }) {
   return (
     <div style={{ display: "flex", gap: "20px", overflow: "scroll" }}>
       {Object.entries(metric).map(([prefix, data]) => {
+        if (prefix.length < MIN_ZEROS) return;
         const cantWorker = workerNames.map((name) => ({
           name,
           cant: data[name]?.cant || 0,
