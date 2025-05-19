@@ -12,7 +12,7 @@ import {
 /**
  * Cantidad mínima de ceros cuyos gráficos se dibujarán.
  */
-const MIN_ZEROS = 4;
+const MIN_ZEROS = 1;
 
 function GraphQuantities({ metric }) {
   if (!metric) return null;
